@@ -27,7 +27,7 @@ EOF
     echo "deb http://apt.kubernetes.io/ kubernetes-xenial main" > /etc/apt/sources.list.d/kubernetes.list
     apt-get update -y
     apt-get install -y --no-install-recommends supervisor iproute2 iputils-ping ethtool ebtables kmod
-    apt-get install -y --no-install-recommends kubelet=1.16.3-00 kubectl=1.16.3-00 kubeadm=1.16.3-00
+    apt-get install -y --no-install-recommends kubelet=1.20.9-00 kubectl=1.20.9-00 kubeadm=1.20.9-00
     apt-get install -y --no-install-recommends squashfs-tools libssl-dev uuid-dev libseccomp-dev libseccomp2
     apt-get install -y --no-install-recommends gcc make git pkg-config less cryptsetup
 
@@ -125,7 +125,7 @@ esac
 EOF
     chmod 755 /usr/bin/service-sup
 
-    curl https://dl.google.com/go/go1.12.1.linux-amd64.tar.gz | tar -C /opt -xz
+    curl https://dl.google.com/go/go1.16.1.linux-amd64.tar.gz | tar -C /opt -xz
     export PATH=/opt/go/bin:$PATH
     export GOPATH=/opt/gopath
 
@@ -133,7 +133,367 @@ EOF
     cd /opt
 
     git clone https://github.com/sylabs/singularity-cri -b v1.0.0-beta.6
-    git clone https://github.com/sylabs/singularity -b v3.4.1
+    git clone https://github.com/sylabs/singularity -b v3.8.2
+    rm -f /opt/singularity/pkg/ocibundle/sif/bundle_linux.go
+    cat > /opt/singularity/pkg/ocibundle/sif/bundle_linux.go <<EOF
+package sifbundle
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"syscall"
+
+	imageSpecs "github.com/opencontainers/image-spec/specs-go/v1"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sylabs/singularity/internal/pkg/runtime/engine/config/oci/generate"
+
+	"github.com/sylabs/singularity/pkg/image"
+	"github.com/sylabs/singularity/pkg/ocibundle"
+	"github.com/sylabs/singularity/pkg/ocibundle/tools"
+)
+
+type sifBundle struct {
+	image      string
+	bundlePath string
+	writable   bool
+	ocibundle.Bundle
+}
+
+func (s *sifBundle) writeConfig(img *image.Image, g *generate.Generator) error {
+	// check if SIF file contain an OCI image configuration
+	reader, err := image.NewSectionReader(img, image.SIFDescOCIConfigJSON, -1)
+	if err != nil && err != image.ErrNoSection {
+		return fmt.Errorf("failed to read %s section: %s", image.SIFDescOCIConfigJSON, err)
+	} else if err == image.ErrNoSection {
+		return tools.SaveBundleConfig(s.bundlePath, g)
+	}
+
+	var imgConfig imageSpecs.ImageConfig
+
+	if err := json.NewDecoder(reader).Decode(&imgConfig); err != nil {
+		return fmt.Errorf("failed to decode %s: %s", image.SIFDescOCIConfigJSON, err)
+	}
+
+	if len(g.Config.Process.Args) == 1 && g.Config.Process.Args[0] == tools.RunScript {
+		args := imgConfig.Entrypoint
+		args = append(args, imgConfig.Cmd...)
+		if len(args) > 0 {
+			g.SetProcessArgs(args)
+		}
+	}
+
+	if g.Config.Process.Cwd == "" && imgConfig.WorkingDir != "" {
+		g.SetProcessCwd(imgConfig.WorkingDir)
+	}
+	for _, e := range imgConfig.Env {
+		found := false
+		k := strings.SplitN(e, "=", 2)
+		for _, pe := range g.Config.Process.Env {
+			if strings.HasPrefix(pe, k[0]+"=") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			g.AddProcessEnv(k[0], k[1])
+		}
+	}
+
+	volumes := tools.Volumes(s.bundlePath).Path()
+	for dst := range imgConfig.Volumes {
+		replacer := strings.NewReplacer(string(os.PathSeparator), "_")
+		src := filepath.Join(volumes, replacer.Replace(dst))
+		if err := os.MkdirAll(src, 0o755); err != nil {
+			return fmt.Errorf("failed to create volume directory %s: %s", src, err)
+		}
+		g.AddMount(specs.Mount{
+			Source:      src,
+			Destination: dst,
+			Type:        "none",
+			Options:     []string{"bind", "rw"},
+		})
+	}
+
+	return tools.SaveBundleConfig(s.bundlePath, g)
+}
+
+// Create creates an OCI bundle from a SIF image
+func (s *sifBundle) Create(ociConfig *specs.Spec) error {
+	if s.image == "" {
+		return fmt.Errorf("image wasn't set, need one to create bundle")
+	}
+
+	img, err := image.Init(s.image, s.writable)
+	if err != nil {
+		return fmt.Errorf("failed to load SIF image %s: %s", s.image, err)
+	}
+	defer img.File.Close()
+
+	if img.Type != image.SIF {
+		return fmt.Errorf("%s is not a SIF image", s.image)
+	}
+
+	part, err := img.GetRootFsPartition()
+	if err != nil {
+		return fmt.Errorf("while getting root filesystem in SIF %s: %s", s.image, err)
+	}
+
+	if part.Type != image.SQUASHFS {
+		return fmt.Errorf("unsupported image fs type: %v", part.Type)
+	}
+	offset := part.Offset
+	size := part.Size
+
+	// generate OCI bundle directory and config
+	g, err := tools.GenerateBundleConfig(s.bundlePath, ociConfig)
+	if err != nil {
+		return fmt.Errorf("failed to generate OCI bundle/config: %s", err)
+	}
+
+	// associate SIF image with a block
+	loop, loopCloser, err := tools.CreateLoop(img.File, offset, size)
+	if err != nil {
+		tools.DeleteBundle(s.bundlePath)
+		return fmt.Errorf("failed to find loop device: %s", err)
+	}
+	defer loopCloser.Close()
+
+	rootFs := tools.RootFs(s.bundlePath).Path()
+	fmt.Printf("rootFs %s s.bundlePath %s",rootFs,s.bundlePath)
+	if err := syscall.Mount(loop, rootFs, "squashfs", syscall.MS_RDONLY, ""); err != nil {
+		tools.DeleteBundle(s.bundlePath)
+		return fmt.Errorf("failed to mount SIF partition: %s", err)
+	}
+
+	if err := s.writeConfig(img, g); err != nil {
+		// best effort to release loop device
+		syscall.Unmount(rootFs, syscall.MNT_DETACH)
+		tools.DeleteBundle(s.bundlePath)
+		return fmt.Errorf("failed to write OCI configuration: %s", err)
+	}
+
+	if s.writable {
+		if err := tools.CreateOverlay(s.bundlePath); err != nil {
+			// best effort to release loop device
+			syscall.Unmount(rootFs, syscall.MNT_DETACH)
+			tools.DeleteBundle(s.bundlePath)
+			return fmt.Errorf("failed to create overlay: %s", err)
+		}
+	}
+	return nil
+}
+
+// Delete erases OCI bundle create from SIF image
+func (s *sifBundle) Delete() error {
+	if s.writable {
+		if err := tools.DeleteOverlay(s.bundlePath); err != nil {
+			return fmt.Errorf("delete error: %s", err)
+		}
+	}
+	// Umount rootfs
+	rootFsDir := tools.RootFs(s.bundlePath).Path()
+	if err := syscall.Unmount(rootFsDir, syscall.MNT_DETACH); err != nil {
+		return fmt.Errorf("failed to unmount %s: %s", rootFsDir, err)
+	}
+	// delete bundle directory
+	return tools.DeleteBundle(s.bundlePath)
+}
+
+// FromSif returns a bundle interface to create/delete OCI bundle from SIF image
+func FromSif(image, bundle string, writable bool) (ocibundle.Bundle, error) {
+	var err error
+
+	s := &sifBundle{
+		writable: writable,
+	}
+	s.bundlePath, err = filepath.Abs(bundle)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine bundle path: %s", err)
+	}
+	if image != "" {
+		s.image, err = filepath.Abs(image)
+		if err != nil {
+			return nil, fmt.Errorf("failed to determine image path: %s", err)
+		}
+	}
+	return s, nil
+}
+EOF
+    rm -rf /opt/singularity-cri/pkg/kube/container_files.go
+    cat > /opt/singularity-cri/pkg/kube/container_files.go <<EOF
+package kube
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+
+	"github.com/golang/glog"
+	ocibundle "github.com/sylabs/singularity/pkg/ocibundle/sif"
+)
+
+const (
+	contSocketPath    = "sync.sock"
+	contBundlePath    = "bundle/"
+	contRootfsPath    = "rootfs/"
+	contOCIConfigPath = "config.json"
+)
+
+// ociConfigPath returns path to container's config.json file.
+func (c *Container) ociConfigPath() string {
+	return filepath.Join(c.baseDir, contBundlePath, contOCIConfigPath)
+}
+
+// rootfsPath returns path to container's rootfs directory.
+func (c *Container) rootfsPath() string {
+	return filepath.Join(c.baseDir, contBundlePath, contRootfsPath)
+}
+
+// socketPath returns path to container's sync socket.
+func (c *Container) socketPath() string {
+	return filepath.Join(c.baseDir, contSocketPath)
+}
+
+// bundlePath returns path to container's filesystem bundle directory.
+func (c *Container) bundlePath() string {
+	return filepath.Join(c.baseDir, contBundlePath)
+}
+
+// addLogDirectory creates a dedicated directory for container logs under pod's
+// log directory. If pod log directory is not specified, no container logs will be collected
+// even if container log path is not empty.
+func (c *Container) addLogDirectory() error {
+	logDir := c.pod.GetLogDirectory()
+	logPath := c.GetLogPath()
+	if logDir == "" || logPath == "" {
+		return nil
+	}
+
+	logPath = filepath.Join(logDir, logPath)
+	logDir = filepath.Dir(logPath)
+	glog.V(5).Infof("Creating log directory %s", logDir)
+	err := os.MkdirAll(logDir, 0755)
+	if err != nil {
+		return fmt.Errorf("could not create %s: %v", logDir, err)
+	}
+	c.logPath = logPath
+	return nil
+}
+
+func (c *Container) addOCIBundle() error {
+	glog.V(5).Infof("Creating SIF bundle at %s", c.bundlePath())
+	d, err := ocibundle.FromSif(c.imgInfo.Path, c.bundlePath(), true)
+    	glog.V(5).Infof("c.imginfo.path %s",c.imgInfo.Path)
+    	glog.V(5).Infof("c.bundlePath() %s",c.bundlePath)
+	if err != nil {
+		return fmt.Errorf("could not create SIF bundle driver: %v", err)
+	}
+	if err := d.Create(nil); err != nil {
+		return fmt.Errorf("could not create SIF bundle: %v", err)
+	}
+
+	glog.V(5).Infof("Generating OCI config for container %s", c.id)
+	ociSpec, err := translateContainer(c, c.pod)
+	if err != nil {
+		return fmt.Errorf("could not generate oci spec for container: %v", err)
+	}
+	config, err := os.OpenFile(c.ociConfigPath(), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("could not create OCI config file: %v", err)
+	}
+	defer config.Close()
+	err = json.NewEncoder(config).Encode(ociSpec)
+	if err != nil {
+		return fmt.Errorf("could not encode OCI config into json: %v", err)
+	}
+	return nil
+}
+
+func (c *Container) cleanupFiles(silent bool) error {
+	glog.V(5).Infof("Removing bundle at %s", c.bundlePath())
+	d, err := ocibundle.FromSif("", c.bundlePath(), true)
+	if err != nil {
+		if !silent {
+			return fmt.Errorf("could not create SIF bundle driver: %v", err)
+		}
+		glog.Errorf("Could not create SIF bundle driver: %v", err)
+	}
+	if err := d.Delete(); err != nil {
+		if !silent {
+			return fmt.Errorf("could not delete SIF bundle: %v", err)
+		}
+		glog.Errorf("Could not delete SIF bundle: %v", err)
+	}
+	glog.V(5).Infof("Removing container base directory %s", c.baseDir)
+	err = os.RemoveAll(c.baseDir)
+	if err != nil {
+		if !silent {
+			return fmt.Errorf("could not cleanup container: %v", err)
+		}
+		glog.Errorf("Could not cleanup container: %v", err)
+	}
+	// do not clean any container logs as
+	// they will be removed during pod cleanup
+	// see https://github.com/sylabs/singularity-cri/issues/314
+	return nil
+}
+
+func (c *Container) collectTrash() error {
+	if c.trashDir == "" {
+		return nil
+	}
+	contTrashDir := filepath.Join(c.trashDir, c.PodID(), c.id)
+	err := os.MkdirAll(contTrashDir, 0755)
+	if err != nil {
+		return fmt.Errorf("could not create trash directory: %v", err)
+	}
+
+	err = copyFile(c.ociConfigPath(), filepath.Join(contTrashDir, "config.json"))
+	if err != nil {
+		return fmt.Errorf("could not save OCI config to trash directory: %v", err)
+	}
+
+	if c.logPath == "" {
+		return nil
+	}
+
+	trashLogs := filepath.Join(contTrashDir, "logs")
+	err = os.Mkdir(trashLogs, 0755)
+	if err != nil {
+		return fmt.Errorf("could not create trash logs directory: %v", err)
+	}
+
+	dir := filepath.Dir(c.logPath)
+	if dir == c.pod.GetLogDirectory() {
+		// container doesn't have its own log directory
+		// store a single file only
+		err := copyFile(c.logPath, filepath.Join(trashLogs, "1.log"))
+		if err != nil {
+			return fmt.Errorf("could not copy trash log: %v", err)
+		}
+		return nil
+	}
+
+	// container has its own log directory
+	fii, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("could not read log directory: %v", err)
+	}
+	for _, fi := range fii {
+		err := copyFile(filepath.Join(dir, fi.Name()), filepath.Join(trashLogs, fi.Name()))
+		if err != nil {
+			return fmt.Errorf("could not copy trash log: %v", err)
+		}
+	}
+
+	return nil
+}
+EOF
 
     export HOME=/tmp
 
@@ -155,7 +515,7 @@ nodeRegistration:
 ---
 apiVersion: kubeadm.k8s.io/v1beta2
 kind: ClusterConfiguration
-kubernetesVersion: v1.16.3
+kubernetesVersion: v1.20.9
 networking:
   podSubnet: 10.244.0.0/16
 ---
