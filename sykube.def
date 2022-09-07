@@ -328,14 +328,28 @@ package kube
 
 import (
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
-
+	"strings"
+	"syscall"
+	imageSpecs "github.com/opencontainers/image-spec/specs-go/v1"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sylabs/singularity/internal/pkg/runtime/engine/config/oci/generate"
+	"github.com/sylabs/singularity/pkg/image"
+	"github.com/sylabs/singularity/pkg/ocibundle"
+	"github.com/sylabs/singularity/pkg/ocibundle/tools" 
+	"fmt"
+	"io/ioutil"
 	"github.com/golang/glog"
 	ocibundle "github.com/sylabs/singularity/pkg/ocibundle/sif"
 )
+
+type sifBundle struct {
+	image      string
+	bundlePath string
+	writable   bool
+	ocibundle.Bundle
+}
 
 const (
 	contSocketPath    = "sync.sock"
@@ -393,9 +407,69 @@ func (c *Container) addOCIBundle() error {
 	if err != nil {
 		return fmt.Errorf("could not create SIF bundle driver: %v", err)
 	}
-	if err := d.Create(nil); err != nil {
-		return fmt.Errorf("could not create SIF bundle: %v", err)
+	
+	if d.image == "" {
+		return fmt.Errorf("image wasn't set, need one to create bundle")
 	}
+
+	img, err := image.Init(d.image, d.writable)
+	if err != nil {
+		return fmt.Errorf("failed to load SIF image %s: %s", d.image, err)
+	}
+	defer img.File.Close()
+
+	if img.Type != image.SIF {
+		return fmt.Errorf("%s is not a SIF image", d.image)
+	}
+
+	part, err := img.GetRootFsPartition()
+	if err != nil {
+		return fmt.Errorf("while getting root filesystem in SIF %s: %s", d.image, err)
+	}
+
+	if part.Type != image.SQUASHFS {
+		return fmt.Errorf("unsupported image fs type: %v", part.Type)
+	}
+	offset := part.Offset
+	size := part.Size
+
+	// generate OCI bundle directory and config
+	g, err := tools.GenerateBundleConfig(d.bundlePath, ociConfig)
+	if err != nil {
+		return fmt.Errorf("failed to generate OCI bundle/config: %s", err)
+	}
+
+	// associate SIF image with a block
+	loop, loopCloser, err := tools.CreateLoop(img.File, offset, size)
+	if err != nil {
+		tools.DeleteBundle(d.bundlePath)
+		return fmt.Errorf("failed to find loop device: %s", err)
+	}
+	defer loopCloser.Close()
+
+	rootFs := tools.RootFs(d.bundlePath).Path()
+	fmt.Printf("rootFs %s d.bundlePath %s",rootFs,d.bundlePath)
+	if err := syscall.Mount(loop, rootFs, "squashfs", syscall.MS_RDONLY, ""); err != nil {
+		tools.DeleteBundle(s.bundlePath)
+		return fmt.Errorf("failed to mount SIF partition: %s", err)
+	}
+
+	if err := d.writeConfig(img, g); err != nil {
+		// best effort to release loop device
+		syscall.Unmount(rootFs, syscall.MNT_DETACH)
+		tools.DeleteBundle(d.bundlePath)
+		return fmt.Errorf("failed to write OCI configuration: %s", err)
+	}
+
+	if d.writable {
+		if err := tools.CreateOverlay(s.bundlePath); err != nil {
+			// best effort to release loop device
+			syscall.Unmount(rootFs, syscall.MNT_DETACH)
+			tools.DeleteBundle(s.bundlePath)
+			return fmt.Errorf("failed to create overlay: %s", err)
+		}
+	}
+	
 
 	glog.V(5).Infof("Generating OCI config for container %s", c.id)
 	ociSpec, err := translateContainer(c, c.pod)
