@@ -27,7 +27,7 @@ EOF
     echo "deb http://apt.kubernetes.io/ kubernetes-xenial main" > /etc/apt/sources.list.d/kubernetes.list
     apt-get update -y
     apt-get install -y --no-install-recommends supervisor iproute2 iputils-ping ethtool ebtables kmod
-    apt-get install -y --no-install-recommends kubelet=1.21.0-00 kubectl=1.21.0-00 kubeadm=1.21.0-00
+    apt-get install -y --no-install-recommends kubelet=1.20.9-00 kubectl=1.20.9-00 kubeadm=1.20.9-00
     apt-get install -y --no-install-recommends squashfs-tools libssl-dev uuid-dev libseccomp-dev libseccomp2
     apt-get install -y --no-install-recommends gcc make git pkg-config less cryptsetup
 
