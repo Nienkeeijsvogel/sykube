@@ -226,7 +226,7 @@ EOF
     dest=`realpath --relative-base="/proc/$p/root" "/usr/local/bin" 2>/dev/null`
     if [ ! -z "${dest}" ]; then
         if cp --preserve=mode /etc/sykube/sykube "/proc/$p/root/${dest}/sykube"; then
-            echo "sykube is now installed in ${dest}"
+            echo "sykube is now installed in /${dest}"
             exit
         fi
     else
