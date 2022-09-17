@@ -257,11 +257,11 @@ start_master() {
 
 bootstrap_master() {
     print_cmd "Add ${MASTER_NAME} to /etc/hosts" singularity exec instance://${MASTER_NAME} /bin/sh -c "echo '${MASTER_IP} ${MASTER_NAME}.cluster.local ${MASTER_NAME}' >> /etc/hosts"
-    print_cmd "Running kubeadm ${MASTER_NAME}" singularity exec instance://${MASTER_NAME} kubeadm init --pod-network-cidr= --cri-socket unix:///var/run/singularity.sock --ignore-preflight-errors=all
+    print_cmd "Running kubeadm ${MASTER_NAME}" singularity exec instance://${MASTER_NAME} kubeadm init --pod-network-cidr=10.244.0.0/16 --cri-socket unix:///var/run/singularity.sock --ignore-preflight-errors=all
     if [ $? != 0 ]; then
         fatal "Failed to bootstrap master node"
     fi
-    print_cmd "Install flannel" singularity exec instance://${MASTER_NAME} kubectl apply -f https://docs.projectcalico.org/v3.8/manifests/calico.yaml
+    print_cmd "Install calico" singularity exec instance://${MASTER_NAME} kubectl apply -f https://docs.projectcalico.org/v3.8/manifests/calico.yaml
     print_cmd "Create admin-user" singularity exec instance://${MASTER_NAME} kubectl apply -f /etc/sykube/admin-user.yml
     print_cmd "Create admin_user role" singularity exec instance://${MASTER_NAME} kubectl apply -f /etc/sykube/admin-role.yml
     print_cmd "Install dashboard" singularity exec instance://${MASTER_NAME} kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta8/aio/deploy/recommended.yaml
