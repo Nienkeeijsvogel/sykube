@@ -212,7 +212,7 @@ EOF
     mount -t tmpfs tmpfs -o nosuid,nodev,mode=755 /run
     mkdir /run/lock
     mkdir /run/flannel
-    mount -t tmpfs tmpfs -o nosuid,nodev,noexec,relatime,size=5120k /run/lock
+    mount -t tmpfs tmpfs -o nosuid,nodev,noexec,relatime /run/lock
     mount --make-rshared /
     mkdir -p /var/log/supervisor 
     exec supervisord
