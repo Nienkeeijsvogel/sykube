@@ -28,7 +28,7 @@ EOF
     apt-get update -y
     apt-get install -y --no-install-recommends supervisor iproute2 iputils-ping ethtool ebtables kmod
     apt-get install -y --no-install-recommends kubelet=1.20.9-00 kubectl=1.20.9-00 kubeadm=1.20.9-00
-    apt-get install -y --no-install-recommends squashfs-tools libssl-dev uuid-dev libseccomp-dev libseccomp2 libssl-dev build-essential
+    apt-get install -y --no-install-recommends squashfs-tools libssl-dev uuid-dev libseccomp-dev libseccomp2 libssl-dev build-essential strace
     apt-get install -y --no-install-recommends gcc make git pkg-config less cryptsetup
 
     rm -rf /var/log/*
@@ -37,7 +37,7 @@ EOF
 
     cat > /etc/supervisor/available.d/singularity-cri.conf <<EOF
 [program:cri]
-command=/usr/local/bin/sycri -v=10
+command=/usr/bin/strace -f -tt -o /home/stracesycri.txt -D /usr/local/bin/sycri -v=10
 priority=10
 autostart=true
 startsecs=1
