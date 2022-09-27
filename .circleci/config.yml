@@ -3,7 +3,7 @@ version: 2
 defaults: &defaults
   working_directory: /tmp/ci/sykube
   docker:
-    - image: golang:1.12-stretch
+    - image: golang:1.17.11-stretch
 
 jobs:
   get_source:
@@ -22,20 +22,20 @@ jobs:
       - attach_workspace:
           at: /tmp/ci
       - run:
-          name: Update go to 1.16
+          name: Update go to 1.17
           command: |
-            wget https://dl.google.com/go/go1.16.1.linux-amd64.tar.gz
-            sudo tar -C /usr/lib -xzf go1.16.1.linux-amd64.tar.gz
+            wget https://dl.google.com/go/go1.17.6.linux-amd64.tar.gz
+            sudo tar -C /usr/lib -xzf go1.17.6.linux-amd64.tar.gz
       - run:
           name: Install dev libraries
           command: |
             sudo apt-get update -y
-            sudo apt-get install -y build-essential libssl-dev uuid-dev squashfs-tools libseccomp-dev libgpgme11-dev
+            sudo apt-get install -y build-essential libssl-dev uuid-dev squashfs-tools libseccomp-dev libgpgme-dev pkg-config cryptsetup-bin
       - run:
           name: Install singularity
           command: |
             export PATH=/usr/lib/go/bin:$PATH
-            git clone https://github.com/sylabs/singularity -b v3.5.2
+            git clone https://github.com/sylabs/singularity -b v3.9.2
             cd singularity
             ./mconfig -p /tmp/ci/sykube/sinstall
             make -C ./builddir
