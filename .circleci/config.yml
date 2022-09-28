@@ -44,7 +44,7 @@ jobs:
           name: set Cgroupv1
           command: |
             sudo rm /etc/default/grub
-            cat > /etc/default/grub <<EOF
+            sudo cat > /etc/default/grub <<EOF
             # If you change this file, run 'update-grub' afterwards to update
             # /boot/grub/grub.cfg.
             # For full documentation of the options in this file, see:
