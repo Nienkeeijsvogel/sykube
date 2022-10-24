@@ -508,6 +508,17 @@ sykube_service() {
     done
 }
 
+sykube_apply() {
+    check_cluster
+    configyml="$1"
+    if [[ $configyml== *.yml || $configyml== *.yaml]]; then
+        singularity exec --bind "$configyml":"$HOME"/"$configyml" instance://sykube-master kubectl apply -f "$HOME"/"$configyml"
+    fi
+    else 
+        fatal "No correct yaml or yml configuration file for Kubernetes"
+    fi        
+}
+
 sykube_update() {
     sykube_stop
     get_sykube_image
@@ -576,6 +587,8 @@ case "$1" in
         sykube_status ;;
     kubectl)
         inject_kubectl ;;
+    apply)
+        sykube_apply ;;
     dashboard)
         sykube_dashboard ;;
     service)
