@@ -511,11 +511,10 @@ sykube_service() {
 sykube_apply() {
     check_cluster
     configyml="$1"
-    if [[ $configyml== *.yml || $configyml== *.yaml]]; then
-        singularity exec --bind "$configyml":"$HOME"/"$configyml" instance://sykube-master kubectl apply -f "$HOME"/"$configyml"
-    fi
+    if [ $configyml= *.yml ] ||  [$configyml= *.yaml]; then
+        singularity exec --bind "$configyml" instance://sykube-master kubectl apply -f "$configyml"
     else 
-        fatal "No correct yaml or yml configuration file for Kubernetes"
+        echo "No correct yaml or yml configuration file for Kubernetes"
     fi        
 }
 
