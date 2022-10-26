@@ -587,6 +587,8 @@ case "$1" in
     kubectl)
         inject_kubectl ;;
     apply)
+        run_as_root "$@"
+        shift
         sykube_apply ;;
     dashboard)
         sykube_dashboard ;;
