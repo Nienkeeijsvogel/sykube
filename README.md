@@ -37,7 +37,7 @@ To run Sykube on your machine with newer operating systems as Ubuntu 18.04+, cen
 Build it from this repository:
 
 ```bash
-git clone https://github.com/sylabs/sykube
+git clone https://github.com/Nienkeeijsvogel/sykube
 cd sykube
 sudo singularity build /tmp/sykube.sif sykube.def
 sudo singularity run /tmp/sykube.sif
