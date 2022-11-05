@@ -23,6 +23,8 @@ For Ubuntu 22.04 the /etc/default/grub file should be replaced by the sykube/gru
 after which sudo update-grub and sudo init 6 should be run.
 
 ### Sykube installation
+Pulling the image from library://sykube works on only on older operating systems as centos7, ubuntu 16.04.  
+For newer operating systems build the image locally as explained below.
 
 To install sykube on your machine, just run:
 
@@ -32,7 +34,7 @@ sudo singularity run library://sykube
 
 The above command does two things, it downloads and cache the image used by Sykube and install sykube binary
 in ``/usr/local/bin`` path
-
+!!!
 ### Setup a K8S cluster
 
 * To start a K8S cluster installation, just type:
@@ -62,6 +64,7 @@ also installed the token will be automatically set in your clipboard, then you w
 corresponding token page field.
 
 ## From source
+For newer operating systems as Ubuntu 18.04 and newer, centos 8 and newer: 
 
 To build it from this repository:
 
