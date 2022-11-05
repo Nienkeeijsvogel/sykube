@@ -23,10 +23,7 @@ For Ubuntu 22.04 the /etc/default/grub file should be replaced by the sykube/gru
 after which sudo update-grub and sudo init 6 should be run.
 
 ### Sykube installation
-Pulling the image from library://sykube works on only on older operating systems as centos7, ubuntu 16.04.  
-For newer operating systems build the image locally as explained below.
-
-To install sykube on your machine, just run:
+To install sykube on your machines running older operating systems as centos7, ubuntu 16.04, just run:
 
 ```bash
 sudo singularity run library://sykube
@@ -64,9 +61,9 @@ also installed the token will be automatically set in your clipboard, then you w
 corresponding token page field.
 
 ## From source
-For newer operating systems as Ubuntu 18.04 and newer, centos 8 and newer: 
+To run Sykube on your machine with newer operating systems as Ubuntu 18.04+, centos 8+: 
 
-To build it from this repository:
+Build it from this repository:
 
 ```bash
 git clone https://github.com/sylabs/sykube
