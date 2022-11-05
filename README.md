@@ -31,7 +31,20 @@ sudo singularity run library://sykube
 
 The above command does two things, it downloads and cache the image used by Sykube and install sykube binary
 in ``/usr/local/bin`` path
-!!!
+
+To run Sykube on your machine with newer operating systems as Ubuntu 18.04+, centos 8+: 
+
+Build it from this repository:
+
+```bash
+git clone https://github.com/sylabs/sykube
+cd sykube
+sudo singularity build /tmp/sykube.sif sykube.def
+sudo singularity run /tmp/sykube.sif
+sykube init --local-image /tmp/sykube.sif
+```
+
+
 ### Setup a K8S cluster
 
 * To start a K8S cluster installation, just type:
@@ -59,16 +72,3 @@ sykube dashboard
 If you have ``xdg-open`` installed, it will automatically open your default internet browser, and if ``xclip`` is
 also installed the token will be automatically set in your clipboard, then you would just have to paste in the
 corresponding token page field.
-
-## From source
-To run Sykube on your machine with newer operating systems as Ubuntu 18.04+, centos 8+: 
-
-Build it from this repository:
-
-```bash
-git clone https://github.com/sylabs/sykube
-cd sykube
-sudo singularity build /tmp/sykube.sif sykube.def
-sudo singularity run /tmp/sykube.sif
-sykube init --local-image /tmp/sykube.sif
-```
