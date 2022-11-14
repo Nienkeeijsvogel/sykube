@@ -10,14 +10,14 @@ Please reach out to us via community@sylabs.io if you are interested in establis
 
 Sykube is inspired by [Minikube](https://kubernetes.io/docs/setup/learning-environment/minikube/) and allows
 to quickly deploy a localized multi-node K8S cluster (2 nodes by default) on a single machine. The K8S cluster
-is setup with the help of [Singularity-CRI](https://github.com/sylabs/singularity-cri) and
-[Singularity OCI](https://sylabs.io/guides/3.2/user-guide/oci_runtime.html).
+is setup with the help of [Singularity-CRI](https://github.com/Nienkeeijsvogel/singularity-cri) and
+[Singularity OCI](https://sylabs.io/guides/3.5/user-guide/oci_runtime.html).
 
 It's easy to use and automatically install a Kubernetes dashboard.
 
 ## Quick start
 
-Sykube requires Singularity (a version >= [3.2](https://github.com/sylabs/singularity/tree/v3.2.0) is recommended).
+Sykube requires Singularity (a version >= [3.5](https://github.com/sylabs/singularity/tree/v3.2.0) is recommended).
 The installment file can be parsed in the terminal for Ubuntu and Debian distributions.
 
 ### Sykube installation
