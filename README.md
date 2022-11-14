@@ -21,7 +21,7 @@ Sykube requires Singularity (a version >= [3.5](https://github.com/sylabs/singul
 The installment file can be parsed in the terminal for Ubuntu and Debian distributions.
 
 ### Sykube installation
-To install sykube on your machine running older operating systems as centos7, ubuntu 16.04, just run:
+To install sykube on your machine running older operating systems as Centos 7, Ubuntu 16.04, just run:
 
 ```bash
 sudo singularity run library://sykube
