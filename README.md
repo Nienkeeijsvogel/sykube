@@ -31,7 +31,7 @@ The above command does two things, it downloads and cache the image used by Syku
 in ``/usr/local/bin`` path
 
 For Ubuntu 22.04 the /etc/default/grub file should be replaced by the sykube/grub file 
-after which sudo update-grub and sudo init 6 should be run.
+after which sudo update-grub and sudo init 6 should be run. <br />
 To run Sykube on your machine with newer operating systems as Ubuntu 18.04+, centos 8+: 
 
 Build it from this repository:
