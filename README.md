@@ -19,8 +19,6 @@ It's easy to use and automatically install a Kubernetes dashboard.
 
 Sykube requires Singularity (a version >= [3.2](https://github.com/sylabs/singularity/tree/v3.2.0) is recommended).
 The installment file can be parsed in the terminal for Ubuntu and Debian distributions.
-For Ubuntu 22.04 the /etc/default/grub file should be replaced by the sykube/grub file 
-after which sudo update-grub and sudo init 6 should be run.
 
 ### Sykube installation
 To install sykube on your machine running older operating systems as centos7, ubuntu 16.04, just run:
@@ -33,6 +31,8 @@ The above command does two things, it downloads and cache the image used by Syku
 in ``/usr/local/bin`` path
 
 To run Sykube on your machine with newer operating systems as Ubuntu 18.04+, centos 8+: 
+For Ubuntu 22.04 the /etc/default/grub file should be replaced by the sykube/grub file 
+after which sudo update-grub and sudo init 6 should be run.
 
 Build it from this repository:
 
